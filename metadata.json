@@ -1,0 +1,5 @@
+{
+  "name": "LocalMart",
+  "description": "A local delivery app for groceries, vegetables, and pharmacy items.",
+  "requestFramePermissions": ["geolocation"]
+}
