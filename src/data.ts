@@ -2,11 +2,14 @@ export type Category = 'Grocery' | 'Vegetables' | 'Pharmacy' | 'Snacks';
 
 export interface Shop {
   id: string;
+  vendorId?: string;
   name: string;
+  address?: string;
+  location?: { lat: number; lng: number } | null;
   image: string;
   rating: number;
   deliveryTime: string;
-  categories: Category[];
+  categories: (Category | string)[];
   deliveryFee: number;
 }
 

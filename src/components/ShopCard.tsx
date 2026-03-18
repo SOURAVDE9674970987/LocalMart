@@ -9,6 +9,43 @@ interface ShopCardProps {
 }
 
 export function ShopCard({ shop, onClick }: ShopCardProps) {
+  const getNormalizedCategories = () => {
+    let shopCategories = shop.categories;
+    let normalizedCategories: string[] = [];
+    
+    const processCategory = (cat: any) => {
+      if (Array.isArray(cat)) {
+        cat.forEach(processCategory);
+      } else if (typeof cat === 'string') {
+        try {
+          const parsed = JSON.parse(cat);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(processCategory);
+          } else if (typeof parsed === 'string') {
+            normalizedCategories.push(parsed);
+          } else {
+            normalizedCategories.push(cat);
+          }
+        } catch (e) {
+          const cleaned = cat.replace(/^\[|\]$/g, '').replace(/['"]/g, '');
+          if (cleaned.includes(',')) {
+            cleaned.split(',').forEach(c => normalizedCategories.push(c.trim()));
+          } else {
+            normalizedCategories.push(cat.trim());
+          }
+        }
+      }
+    };
+
+    if (typeof shopCategories === 'string') {
+      processCategory(shopCategories);
+    } else if (Array.isArray(shopCategories)) {
+      shopCategories.forEach(processCategory);
+    }
+    
+    return normalizedCategories;
+  };
+
   return (
     <div 
       onClick={onClick}
@@ -39,7 +76,7 @@ export function ShopCard({ shop, onClick }: ShopCardProps) {
           <span>Delivery: ${shop.deliveryFee.toFixed(2)}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {shop.categories.map(category => (
+          {getNormalizedCategories().map((category: string) => (
             <span key={category} className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md">
               {category}
             </span>

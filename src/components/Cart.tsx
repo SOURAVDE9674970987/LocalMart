@@ -1,46 +1,61 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, ShoppingBag, Plus, Minus, ArrowRight, Tag, MessageSquare, Coins, Store } from 'lucide-react';
 import { useCart } from '../CartContext';
-import { shops } from '../data';
+import { db, auth } from '../firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, increment } from 'firebase/firestore';
+import { Shop } from './VendorDashboard';
+import { StripeCheckout } from './CheckoutForm';
 
 interface CartProps {
   isOpen: boolean;
   onClose: () => void;
-  onCheckoutSuccess?: () => void;
+  onCheckoutSuccess?: (orderId?: string) => void;
+  address: string;
 }
 
-export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
+export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps) {
   const { items, updateQuantity, totalItems, totalPrice, loyaltyPoints, addLoyaltyPoints, clearCart } = useCart();
   const [promoCode, setPromoCode] = useState('');
   const [isPromoApplied, setIsPromoApplied] = useState(false);
   const [tip, setTip] = useState<number>(0);
   const [instructions, setInstructions] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [shops, setShops] = useState<Shop[]>([]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (isOpen && shops.length === 0) {
+      const fetchShops = async () => {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'shops'));
+          const shopsData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Shop[];
+          setShops(shopsData);
+        } catch (error) {
+          console.error("Error fetching shops:", error);
+        }
+      };
+      fetchShops();
+    }
+  }, [isOpen, shops.length]);
 
   // Group items by shop
   const groupedItems = useMemo(() => {
     const groups: Record<string, typeof items> = {};
     items.forEach(item => {
-      if (!groups[item.shopId]) {
-        groups[item.shopId] = [];
+      const shopId = item.shopId || 'localmart';
+      if (!groups[shopId]) {
+        groups[shopId] = [];
       }
-      groups[item.shopId].push(item);
+      groups[shopId].push(item);
     });
     return groups;
   }, [items]);
 
   // Calculate total delivery fee (sum of delivery fees for all unique shops in cart)
   const totalDeliveryFee = useMemo(() => {
-    let fee = 0;
-    Object.keys(groupedItems).forEach(shopId => {
-      const shop = shops.find(s => s.id === shopId);
-      if (shop) {
-        fee += shop.deliveryFee;
-      }
-    });
-    return fee;
+    return Object.keys(groupedItems).length * 1.5;
   }, [groupedItems]);
 
   const discount = isPromoApplied ? totalPrice * 0.1 : 0; // 10% discount
@@ -57,17 +72,104 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
 
   const handleCheckout = () => {
     setIsCheckingOut(true);
-    setTimeout(() => {
+  };
+
+  const handlePaymentSuccess = async () => {
+    try {
+      const customerId = auth.currentUser?.uid || 'guest';
+      const createdAt = new Date().toISOString();
+
+      let firstOrderId: string | undefined;
+
+      // Process each shop's order
+      for (const [shopId, shopItems] of Object.entries(groupedItems)) {
+        const itemsList = Array.isArray(shopItems) ? shopItems : [];
+        if (itemsList.length === 0) continue;
+
+        // Calculate totals for this specific shop
+        const shopTotalItemsPrice = itemsList.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        // Apply proportional discount if promo code used
+        const shopDiscount = isPromoApplied ? shopTotalItemsPrice * 0.1 : 0;
+        const shopSubtotal = shopTotalItemsPrice - shopDiscount;
+        
+        // Delivery fee is fixed $1.5 per shop
+        const deliveryFee = 1.5;
+        
+        // Calculate earnings
+        const commission = shopSubtotal * 0.05; // 5% commission
+        const vendorEarnings = shopSubtotal - commission;
+        
+        // Simulate distance for driver earnings (0.1 to 1.0 km)
+        const distanceKm = parseFloat((Math.random() * 0.9 + 0.1).toFixed(2));
+        const driverEarnings = distanceKm; // $1 per km
+        const appEarnings = deliveryFee - driverEarnings + commission;
+
+        const shopTotalAmount = shopSubtotal + deliveryFee + (tip / Object.keys(groupedItems).length); // Split tip evenly
+        
+        const shopDetails = shops.find(s => s.id === shopId);
+        const shopName = shopDetails?.name || (shopId === 'localmart' ? 'LocalMart Express' : 'Unknown Shop');
+        const shopAddress = shopDetails?.address || 'Unknown Address';
+
+        // Create order document
+        const orderRef = await addDoc(collection(db, 'orders'), {
+          customerId,
+          customerName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Guest',
+          shopId,
+          shopName,
+          shopAddress,
+          items: itemsList.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.image
+          })),
+          totalAmount: shopTotalAmount,
+          status: 'pending',
+          deliveryAddress: address,
+          createdAt,
+          deliveryFee,
+          commission,
+          vendorEarnings,
+          driverEarnings,
+          distanceKm,
+          appEarnings
+        });
+
+        if (!firstOrderId) {
+          firstOrderId = orderRef.id;
+        }
+
+        // Deduct stock for each item
+        for (const item of itemsList) {
+          if (item.id && item.shopId !== 'localmart') {
+            try {
+              const productRef = doc(db, 'products', item.id);
+              await updateDoc(productRef, {
+                stock: increment(-item.quantity)
+              });
+            } catch (err) {
+              console.error(`Failed to update stock for product ${item.id}:`, err);
+            }
+          }
+        }
+      }
+
       addLoyaltyPoints(pointsEarned);
       clearCart();
       setIsCheckingOut(false);
       if (onCheckoutSuccess) {
-        onCheckoutSuccess();
+        onCheckoutSuccess(firstOrderId);
       } else {
         onClose();
       }
-    }, 1500);
+    } catch (error) {
+      console.error("Error creating orders:", error);
+      alert("There was an error processing your order. Please contact support.");
+    }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -94,7 +196,15 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {items.length === 0 ? (
+          {isCheckingOut ? (
+            <div className="py-4">
+              <StripeCheckout 
+                amount={grandTotal} 
+                onSuccess={handlePaymentSuccess} 
+                onCancel={() => setIsCheckingOut(false)} 
+              />
+            </div>
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-4">
               <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
                 <ShoppingBag className="w-10 h-10 text-gray-300 dark:text-gray-600" />
@@ -113,7 +223,6 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
               {/* Grouped Items List */}
               {Object.entries(groupedItems).map(([shopId, shopItems]) => {
                 const shop = shops.find(s => s.id === shopId);
-                if (!shop) return null;
                 
                 // Ensure shopItems is an array before mapping
                 const itemsList = Array.isArray(shopItems) ? shopItems : [];
@@ -123,9 +232,13 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
                     <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Store className="w-4 h-4 text-emerald-600 dark:text-emerald-500" />
-                        <span className="font-semibold text-gray-900 dark:text-white text-sm">{shop.name}</span>
+                        <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                          {shop ? shop.name : 'LocalMart Express'}
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">Delivery: ${shop.deliveryFee.toFixed(2)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Delivery: ${shop ? shop.deliveryFee.toFixed(2) : '2.99'}
+                      </span>
                     </div>
                     <div className="p-4 space-y-4">
                       {itemsList.map((item) => (
@@ -269,7 +382,7 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess }: CartProps) {
           )}
         </div>
 
-        {items.length > 0 && (
+        {items.length > 0 && !isCheckingOut && (
           <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
             <button 
               onClick={handleCheckout}

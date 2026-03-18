@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product } from './data';
 
 export interface CartItem extends Product {
@@ -32,10 +32,38 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [loyaltyPoints, setLoyaltyPoints] = useState<number>(150); // Start with some points
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [items, setItems] = useState<CartItem[]>(() => {
+    const saved = localStorage.getItem('localmart_cart');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [wishlist, setWishlist] = useState<string[]>(() => {
+    const saved = localStorage.getItem('localmart_wishlist');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [loyaltyPoints, setLoyaltyPoints] = useState<number>(() => {
+    const saved = localStorage.getItem('localmart_loyalty');
+    return saved ? parseInt(saved, 10) : 150;
+  });
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => {
+    const saved = localStorage.getItem('localmart_subscriptions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('localmart_cart', JSON.stringify(items));
+  }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem('localmart_wishlist', JSON.stringify(wishlist));
+  }, [wishlist]);
+
+  useEffect(() => {
+    localStorage.setItem('localmart_loyalty', loyaltyPoints.toString());
+  }, [loyaltyPoints]);
+
+  useEffect(() => {
+    localStorage.setItem('localmart_subscriptions', JSON.stringify(subscriptions));
+  }, [subscriptions]);
 
   const addToCart = (product: Product) => {
     setItems((prev) => {

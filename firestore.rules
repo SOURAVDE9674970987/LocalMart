@@ -1,0 +1,249 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - email: string (required)
+    //   - name: string (optional)
+    //   - role: string (required, 'customer', 'vendor', 'driver', 'admin')
+    //   - createdAt: string (optional)
+    //
+    // Collection: products
+    // Document ID: {productId}
+    // Fields:
+    //   - name: string (required)
+    //   - description: string (optional)
+    //   - price: number (required)
+    //   - image: string (optional)
+    //   - category: string (optional)
+    //   - shopId: string (required)
+    //   - stock: number (optional)
+    //   - rating: number (optional)
+    //   - reviews: number (optional)
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - customerId: string (required)
+    //   - customerName: string (optional)
+    //   - shopId: string (required)
+    //   - shopName: string (optional)
+    //   - shopAddress: string (optional)
+    //   - items: list (optional)
+    //   - totalAmount: number (required)
+    //   - status: string (required, 'pending', 'accepted', 'preparing', 'ready', 'delivering', 'completed', 'rejected')
+    //   - deliveryAddress: string (optional)
+    //   - createdAt: string (required)
+    //   - deliveryFee: number (optional)
+    //   - commission: number (optional)
+    //   - vendorEarnings: number (optional)
+    //   - driverEarnings: number (optional)
+    //   - distanceKm: number (optional)
+    //   - appEarnings: number (optional)
+    //   - driverId: string (optional)
+    //
+    // Collection: shops
+    // Document ID: {shopId}
+    // Fields:
+    //   - name: string (required)
+    //   - description: string (optional)
+    //   - image: string (optional)
+    //   - rating: number (optional)
+    //   - deliveryTime: string (optional)
+    //   - minimumOrder: number (optional)
+    //   - tags: list (optional)
+    //   - address: string (optional)
+    //   - vendorId: string (required)
+    //
+    // Collection: categories
+    // Document ID: {categoryId}
+    // Fields:
+    //   - name: string (required)
+    //   - icon: string (optional)
+    //   - color: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "desourav646@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isVendor() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'vendor';
+    }
+
+    function isDriver() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.email is string &&
+             data.role in ['customer', 'vendor', 'driver', 'admin'] &&
+             (!('name' in data) || data.name is string) &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.price is number && data.price >= 0 &&
+             data.shopId is string && data.shopId.size() > 0 &&
+             (!('description' in data) || data.description is string) &&
+             (!('image' in data) || data.image is string) &&
+             (!('category' in data) || data.category is string) &&
+             (!('unit' in data) || data.unit is string) &&
+             (!('stock' in data) || data.stock is number && data.stock >= 0) &&
+             (!('rating' in data) || data.rating is number && data.rating >= 0 && data.rating <= 5) &&
+             (!('reviews' in data) || data.reviews is number && data.reviews >= 0);
+    }
+
+    function isValidOrder(data) {
+      return data.customerId is string && data.customerId.size() > 0 &&
+             data.shopId is string && data.shopId.size() > 0 &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.status in ['pending', 'accepted', 'preparing', 'ready', 'delivering', 'completed', 'rejected'] &&
+             data.createdAt is string &&
+             (!('customerName' in data) || data.customerName is string) &&
+             (!('shopName' in data) || data.shopName is string) &&
+             (!('shopAddress' in data) || data.shopAddress is string) &&
+             (!('items' in data) || data.items is list) &&
+             (!('deliveryAddress' in data) || data.deliveryAddress is string) &&
+             (!('deliveryFee' in data) || data.deliveryFee is number && data.deliveryFee >= 0) &&
+             (!('commission' in data) || data.commission is number && data.commission >= 0) &&
+             (!('vendorEarnings' in data) || data.vendorEarnings is number && data.vendorEarnings >= 0) &&
+             (!('driverEarnings' in data) || data.driverEarnings is number && data.driverEarnings >= 0) &&
+             (!('distanceKm' in data) || data.distanceKm is number && data.distanceKm >= 0) &&
+             (!('appEarnings' in data) || data.appEarnings is number) &&
+             (!('driverId' in data) || data.driverId is string);
+    }
+
+    function isValidShop(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.vendorId is string && data.vendorId.size() > 0 &&
+             (!('description' in data) || data.description is string) &&
+             (!('image' in data) || data.image is string) &&
+             (!('rating' in data) || data.rating is number && data.rating >= 0 && data.rating <= 5) &&
+             (!('deliveryTime' in data) || data.deliveryTime is string) &&
+             (!('deliveryFee' in data) || data.deliveryFee is number && data.deliveryFee >= 0) &&
+             (!('minimumOrder' in data) || data.minimumOrder is number && data.minimumOrder >= 0) &&
+             (!('tags' in data) || data.tags is list) &&
+             (!('categories' in data) || data.categories is list) &&
+             (!('location' in data) || (data.location == null || (data.location is map && 'lat' in data.location && 'lng' in data.location))) &&
+             (!('address' in data) || data.address is string);
+    }
+
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
+             (!('icon' in data) || data.icon is string) &&
+             (!('color' in data) || data.color is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                       hasRequiredFields(['email', 'role']) && 
+                       isValidUser(request.resource.data) && 
+                       ((isOwner(userId) && request.resource.data.role == 'customer') || isAdmin());
+      allow update: if isAuthenticated() && 
+                       isValidUser(request.resource.data) && 
+                       ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if true; // Products are public
+      allow create: if isAuthenticated() && 
+                       hasRequiredFields(['name', 'price', 'shopId']) && 
+                       isValidProduct(request.resource.data) && 
+                       (isAdmin() || (isVendor() && get(/databases/$(database)/documents/shops/$(request.resource.data.shopId)).data.vendorId == request.auth.uid));
+      allow update: if isAuthenticated() && 
+                       isValidProduct(request.resource.data) && 
+                       (isAdmin() || 
+                        (isVendor() && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.vendorId == request.auth.uid) ||
+                        // Allow customers to decrement stock when placing an order
+                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']) && 
+                         request.resource.data.stock <= resource.data.stock)
+                       );
+      allow delete: if isAdmin() || (isVendor() && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.vendorId == request.auth.uid);
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.customerId == request.auth.uid || 
+                      isAdmin() || 
+                      (isVendor() && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.vendorId == request.auth.uid) ||
+                      isDriver());
+      allow create: if isAuthenticated() && 
+                       hasRequiredFields(['customerId', 'shopId', 'totalAmount', 'status', 'createdAt']) && 
+                       isValidOrder(request.resource.data) && 
+                       request.resource.data.customerId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       isValidOrder(request.resource.data) && 
+                       (isAdmin() || 
+                        // Vendor can update status
+                        (isVendor() && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.vendorId == request.auth.uid && 
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])) ||
+                        // Driver can update status and driverId
+                        (isDriver() && 
+                         request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'driverId']))
+                       );
+      allow delete: if isAdmin();
+    }
+
+    match /shops/{shopId} {
+      allow read: if true; // Shops are public
+      allow create: if isAuthenticated() && 
+                       hasRequiredFields(['name', 'vendorId']) && 
+                       isValidShop(request.resource.data) && 
+                       (isAdmin() || (isVendor() && request.resource.data.vendorId == request.auth.uid));
+      allow update: if isAuthenticated() && 
+                       isValidShop(request.resource.data) && 
+                       (isAdmin() || (isVendor() && resource.data.vendorId == request.auth.uid));
+      allow delete: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true; // Categories are public
+      allow create: if isAdmin() && hasRequiredFields(['name']) && isValidCategory(request.resource.data);
+      allow update: if isAdmin() && isValidCategory(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

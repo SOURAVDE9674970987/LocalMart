@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, MapPin, Clock, CheckCircle, DollarSign, TrendingUp, Calendar, Map as MapIcon, Navigation } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { db, auth } from '../firebase';
+import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
 // Fix Leaflet's default icon path issues
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -22,29 +24,248 @@ const driverIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+function MapUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center);
+  }, [center, map]);
+  return null;
+}
+
 export function DeliveryDashboard() {
   const [activeTab, setActiveTab] = useState<'deliveries' | 'earnings' | 'performance'>('deliveries');
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [driverLocation, setDriverLocation] = useState<[number, number] | null>(null);
+  const [earnings, setEarnings] = useState({ today: 0, weekly: 0, monthly: 0, totalDeliveries: 0 });
+  const [monthlyData, setMonthlyData] = useState<{ month: string, orders: number, earnings: number }[]>([]);
+  const [hoursOnline, setHoursOnline] = useState<number>(0);
+  const [activeDeliveryRoute, setActiveDeliveryRoute] = useState<{
+    shopCoords: [number, number] | null,
+    customerCoords: [number, number] | null,
+    shopAddress: string,
+    customerAddress: string,
+    shopName: string,
+    customerName: string
+  } | null>(null);
 
-  const deliveries = [
-    {
-      id: 'ORD-1029',
-      customer: 'Sarah Johnson',
-      address: '123 Main St, Apt 4B',
-      status: 'Ready for Pickup',
-      time: '10 mins ago',
-      amount: '$45.00',
-      distance: '2.4 km'
-    },
-    {
-      id: 'ORD-1030',
-      customer: 'Michael Chen',
-      address: '456 Oak Ave',
-      status: 'In Transit',
-      time: 'Just now',
-      amount: '$32.50',
-      distance: '1.1 km'
+  const activeDelivery = deliveries.find(d => d.driverId === auth.currentUser?.uid && d.status === 'delivering');
+  const activeDeliveryId = activeDelivery?.id;
+
+  useEffect(() => {
+    if (activeDelivery) {
+      const fetchCoords = async () => {
+        try {
+          let shopCoords: [number, number] | null = null;
+          let customerCoords: [number, number] | null = null;
+
+          if (activeDelivery.shopAddress) {
+            const shopRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(activeDelivery.shopAddress)}`);
+            const shopData = await shopRes.json();
+            if (shopData && shopData.length > 0) {
+              shopCoords = [parseFloat(shopData[0].lat), parseFloat(shopData[0].lon)];
+            }
+          }
+
+          if (activeDelivery.deliveryAddress) {
+            const custRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(activeDelivery.deliveryAddress)}`);
+            const custData = await custRes.json();
+            if (custData && custData.length > 0) {
+              customerCoords = [parseFloat(custData[0].lat), parseFloat(custData[0].lon)];
+            }
+          }
+
+          setActiveDeliveryRoute({
+            shopCoords,
+            customerCoords,
+            shopAddress: activeDelivery.shopAddress,
+            customerAddress: activeDelivery.deliveryAddress,
+            shopName: activeDelivery.shopName || 'Shop',
+            customerName: activeDelivery.customerName || 'Customer'
+          });
+        } catch (error) {
+          console.error("Error geocoding addresses:", error);
+        }
+      };
+
+      fetchCoords();
+    } else {
+      setActiveDeliveryRoute(null);
     }
-  ];
+  }, [activeDeliveryId]);
+
+  useEffect(() => {
+    const driverId = auth.currentUser?.uid;
+    if (!driverId) return;
+
+    // Start a timer for hours online
+    const storageKey = `driverSessionStart_${driverId}`;
+    const storedStartTime = localStorage.getItem(storageKey);
+    const startTime = storedStartTime ? parseInt(storedStartTime, 10) : Date.now();
+    if (!storedStartTime) {
+      localStorage.setItem(storageKey, startTime.toString());
+    }
+
+    const updateHours = () => {
+      const elapsed = Date.now() - startTime;
+      setHoursOnline(elapsed / (1000 * 60 * 60)); // Convert ms to hours
+    };
+    
+    updateHours();
+    const timer = setInterval(updateHours, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, [auth.currentUser?.uid]);
+
+  useEffect(() => {
+    // Get driver location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setDriverLocation([position.coords.latitude, position.coords.longitude]);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          // Fallback to a default location (e.g., city center)
+          setDriverLocation([40.7128, -74.0060]);
+        }
+      );
+    } else {
+      setDriverLocation([40.7128, -74.0060]);
+    }
+
+    // Listen for orders
+    const q = query(collection(db, 'orders'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      const driverId = auth.currentUser?.uid;
+      
+      // Filter orders:
+      // 1. Unassigned orders that are ready or preparing
+      // 2. Orders assigned to this driver
+      const relevantOrders = allOrders.filter(order => {
+        if (order.driverId === driverId) {
+          if (order.status === 'completed') {
+            if (order.completedAt) {
+              const completedTime = new Date(order.completedAt).getTime();
+              return Date.now() - completedTime < 5 * 60 * 1000; // Keep for 5 minutes
+            }
+            return false;
+          }
+          return true;
+        }
+        if (!order.driverId && (order.status === 'ready' || order.status === 'preparing' || order.status === 'pending')) {
+          // In a real app, we would calculate actual distance using coordinates.
+          // Since we don't have coordinates for the delivery address, we'll use the simulated distanceKm
+          // and only show orders within 1km.
+          return (order.distanceKm || 0) <= 1.0;
+        }
+        return false;
+      });
+      
+      setDeliveries(relevantOrders);
+      
+      // Calculate earnings
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
+      let todayEarnings = 0;
+      let weeklyEarnings = 0;
+      let monthlyEarnings = 0;
+      let totalDeliveries = 0;
+      
+      const monthlyStats: Record<string, { orders: number, earnings: number }> = {};
+      
+      allOrders.forEach(order => {
+        if (order.driverId === driverId && order.status === 'completed') {
+          const orderDate = new Date(order.createdAt);
+          const month = orderDate.toLocaleString('default', { month: 'short' });
+          
+          if (!monthlyStats[month]) {
+            monthlyStats[month] = { orders: 0, earnings: 0 };
+          }
+          
+          monthlyStats[month].orders += 1;
+          monthlyStats[month].earnings += (order.driverEarnings || 0);
+          
+          totalDeliveries++;
+          
+          if (orderDate >= today) {
+            todayEarnings += (order.driverEarnings || 0);
+          }
+          if (orderDate >= weekAgo) {
+            weeklyEarnings += (order.driverEarnings || 0);
+          }
+          if (orderDate >= startOfMonth) {
+            monthlyEarnings += (order.driverEarnings || 0);
+          }
+        }
+      });
+      
+      setEarnings({ 
+        today: todayEarnings, 
+        weekly: weeklyEarnings, 
+        monthly: monthlyEarnings,
+        totalDeliveries 
+      });
+      
+      const formattedMonthlyData = Object.entries(monthlyStats).map(([month, data]) => ({
+        month,
+        orders: data.orders,
+        earnings: data.earnings
+      }));
+      
+      setMonthlyData(formattedMonthlyData);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleAcceptOrder = async (orderId: string) => {
+    try {
+      const driverId = auth.currentUser?.uid;
+      if (!driverId) return;
+      
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, { 
+        driverId,
+        status: 'delivering'
+      });
+    } catch (error) {
+      console.error("Error accepting order:", error);
+    }
+  };
+
+  const handleCompleteOrder = async (orderId: string) => {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, { 
+        status: 'completed',
+        completedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error completing order:", error);
+    }
+  };
+
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setDriverLocation([position.coords.latitude, position.coords.longitude]);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          alert("Could not get your location. Please ensure location services are enabled.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
+  };
 
   const hoursData = [
     { name: 'Mon', hours: 6.5 },
@@ -56,21 +277,37 @@ export function DeliveryDashboard() {
     { name: 'Sun', hours: 4.0 },
   ];
 
-  const monthlyData = [
-    { month: 'Jan', orders: 340, earnings: 1250 },
-    { month: 'Feb', orders: 410, earnings: 1680 },
-    { month: 'Mar', orders: 380, earnings: 1450 },
-  ];
-
   // Map coordinates
-  const driverPos: [number, number] = [40.7128, -74.0060]; // NYC
-  const destinationPos: [number, number] = [40.7200, -73.9900];
-  const route: [number, number][] = [
-    driverPos,
-    [40.7150, -74.0000],
-    [40.7180, -73.9950],
-    destinationPos
-  ];
+  const driverPos: [number, number] = driverLocation || [40.7128, -74.0060]; // NYC
+  
+  let route: [number, number][] = [];
+  let mapCenter = driverPos;
+
+  if (activeDeliveryRoute) {
+    route.push(driverPos);
+    if (activeDeliveryRoute.shopCoords) {
+      route.push(activeDeliveryRoute.shopCoords);
+    }
+    if (activeDeliveryRoute.customerCoords) {
+      route.push(activeDeliveryRoute.customerCoords);
+    }
+    
+    // Center map on the first destination (shop or customer)
+    if (activeDeliveryRoute.shopCoords) {
+      mapCenter = [
+        (driverPos[0] + activeDeliveryRoute.shopCoords[0]) / 2,
+        (driverPos[1] + activeDeliveryRoute.shopCoords[1]) / 2
+      ];
+    }
+  } else {
+    const destinationPos: [number, number] = [driverPos[0] + 0.0080, driverPos[1] + 0.0150];
+    route = [
+      driverPos,
+      [driverPos[0] + 0.0022, driverPos[1] + 0.0060],
+      [driverPos[0] + 0.0052, driverPos[1] + 0.0110],
+      destinationPos
+    ];
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
@@ -106,7 +343,7 @@ export function DeliveryDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Active Orders</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">2</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{deliveries.filter(d => d.status === 'delivering').length}</p>
                 </div>
               </div>
             </div>
@@ -117,7 +354,7 @@ export function DeliveryDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Completed Today</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">14</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{earnings.today > 0 ? Math.round(earnings.today) : 0}</p>
                 </div>
               </div>
             </div>
@@ -128,7 +365,7 @@ export function DeliveryDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Hours Online</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">4.5h</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{hoursOnline.toFixed(1)}h</p>
                 </div>
               </div>
             </div>
@@ -141,13 +378,23 @@ export function DeliveryDashboard() {
                   <MapIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   Live Map
                 </h2>
-                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Navigation className="w-4 h-4" />
-                  Navigating
-                </span>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handleGetLocation}
+                    className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1 hover:underline"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Get My Location
+                  </button>
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Navigation className="w-4 h-4" />
+                    Navigating
+                  </span>
+                </div>
               </div>
               <div className="flex-1 min-h-[400px] relative bg-gray-100 dark:bg-gray-900 z-0">
-                <MapContainer center={driverPos} zoom={14} style={{ height: '100%', width: '100%' }}>
+                <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }}>
+                  <MapUpdater center={mapCenter} />
                   <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -155,16 +402,41 @@ export function DeliveryDashboard() {
                   <Marker position={driverPos} icon={driverIcon}>
                     <Popup>You are here</Popup>
                   </Marker>
-                  <Marker position={destinationPos}>
-                    <Popup>Delivery Destination</Popup>
-                  </Marker>
+                  
+                  {activeDeliveryRoute ? (
+                    <>
+                      {activeDeliveryRoute.shopCoords && (
+                        <Marker position={activeDeliveryRoute.shopCoords}>
+                          <Popup>
+                            <strong>Shop: {activeDeliveryRoute.shopName}</strong><br/>
+                            {activeDeliveryRoute.shopAddress}
+                          </Popup>
+                        </Marker>
+                      )}
+                      {activeDeliveryRoute.customerCoords && (
+                        <Marker position={activeDeliveryRoute.customerCoords}>
+                          <Popup>
+                            <strong>Customer: {activeDeliveryRoute.customerName}</strong><br/>
+                            {activeDeliveryRoute.customerAddress}
+                          </Popup>
+                        </Marker>
+                      )}
+                    </>
+                  ) : (
+                    <Marker position={route[route.length - 1]}>
+                      <Popup>Delivery Destination</Popup>
+                    </Marker>
+                  )}
+                  
                   <Polyline positions={route} color="#10b981" weight={4} dashArray="8, 8" />
                 </MapContainer>
 
                 <div className="absolute bottom-4 left-4 right-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between z-[1000]">
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Next Stop</p>
-                    <p className="text-gray-900 dark:text-white font-bold">456 Oak Ave</p>
+                    <p className="text-gray-900 dark:text-white font-bold">
+                      {activeDeliveryRoute ? activeDeliveryRoute.shopName : '456 Oak Ave'}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">ETA</p>
@@ -179,40 +451,67 @@ export function DeliveryDashboard() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Current Deliveries</h2>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-700 flex-1 overflow-y-auto">
-                {deliveries.map((delivery) => (
-                  <div key={delivery.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-gray-900 dark:text-white">{delivery.id}</span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          delivery.status === 'In Transit' 
-                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        }`}>
-                          {delivery.status}
-                        </span>
-                      </div>
-                      
-                      <div>
-                        <p className="text-gray-900 dark:text-white font-medium mb-1">{delivery.customer}</p>
-                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 gap-1">
-                          <MapPin className="w-4 h-4 shrink-0" />
-                          <span className="truncate">{delivery.address}</span>
+                {deliveries.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">No active deliveries available.</div>
+                ) : (
+                  deliveries.map((delivery) => (
+                    <div key={delivery.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-gray-900 dark:text-white">{delivery.id}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            delivery.status === 'delivering' 
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                          }`}>
+                            {delivery.status.charAt(0).toUpperCase() + delivery.status.slice(1)}
+                          </span>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">Distance</span>
-                          <span className="font-medium text-gray-900 dark:text-white">{delivery.distance}</span>
+                        
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-gray-900 dark:text-white font-medium text-sm mb-0.5">Shop: {delivery.shopName || 'Unknown Shop'}</p>
+                            <div className="flex items-start text-xs text-gray-500 dark:text-gray-400 gap-1">
+                              <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{delivery.shopAddress || 'Address not available'}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-gray-900 dark:text-white font-medium text-sm mb-0.5">Customer: {delivery.customerName || delivery.customerId}</p>
+                            <div className="flex items-start text-xs text-gray-500 dark:text-gray-400 gap-1">
+                              <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{delivery.deliveryAddress}</span>
+                            </div>
+                          </div>
                         </div>
-                        <button className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl transition-colors">
-                          {delivery.status === 'In Transit' ? 'Mark Delivered' : 'Start'}
-                        </button>
+                        
+                        <div className="flex items-center justify-between mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Distance</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{delivery.distanceKm} km</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Earnings</span>
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">${(delivery.driverEarnings || 0).toFixed(2)}</span>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              if (delivery.status === 'delivering') handleCompleteOrder(delivery.id);
+                              else if (delivery.status !== 'completed') handleAcceptOrder(delivery.id);
+                            }}
+                            disabled={delivery.status === 'completed'}
+                            className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-colors ${
+                              delivery.status === 'completed' 
+                                ? 'bg-gray-400 cursor-not-allowed' 
+                                : 'bg-emerald-600 hover:bg-emerald-700'
+                            }`}>
+                            {delivery.status === 'completed' ? 'Delivered' : delivery.status === 'delivering' ? 'Mark Delivered' : 'Accept'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -229,10 +528,7 @@ export function DeliveryDashboard() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Today's Earnings</h3>
               </div>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">$85.50</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" /> +12% from yesterday
-              </p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">${earnings.today.toFixed(2)}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3 mb-2">
@@ -241,10 +537,7 @@ export function DeliveryDashboard() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">This Week</h3>
               </div>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">$420.00</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                45 deliveries completed
-              </p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">${earnings.weekly.toFixed(2)}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3 mb-2">
@@ -253,9 +546,9 @@ export function DeliveryDashboard() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">This Month</h3>
               </div>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">$1,450.00</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">${earnings.monthly.toFixed(2)}</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                380 deliveries completed
+                {earnings.totalDeliveries} deliveries completed
               </p>
             </div>
           </div>

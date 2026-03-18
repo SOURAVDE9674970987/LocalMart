@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Product } from '../data';
 import { useCart } from '../CartContext';
-import { Plus, Minus, Heart } from 'lucide-react';
+import { Plus, Minus, Heart, ShoppingCart } from 'lucide-react';
 import { ProductModal } from './ProductModal';
 
 interface ProductCardProps {
@@ -76,17 +76,28 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </div>
             
-            {quantity === 0 ? (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  addToCart(product);
-                }}
-                className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 font-semibold py-1.5 px-4 rounded-xl transition-colors border border-emerald-200 dark:border-emerald-800 relative z-20"
-              >
-                ADD
-              </button>
+            {product.stock !== undefined && product.stock <= 0 ? (
+              <div className="text-red-500 font-bold text-sm bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-xl border border-red-100 dark:border-red-800/50">
+                Out of Stock
+              </div>
+            ) : quantity === 0 ? (
+              <div className="relative group/btn">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    addToCart(product);
+                  }}
+                  className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 font-semibold py-1.5 px-3 rounded-xl transition-colors border border-emerald-200 dark:border-emerald-800 relative z-20 flex items-center gap-1"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>ADD</span>
+                </button>
+                <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl border border-gray-700">
+                  <span className="font-semibold">{product.name}</span> • ${product.price.toFixed(2)}
+                  <div className="absolute top-full right-6 border-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center bg-emerald-600 text-white rounded-xl overflow-hidden shadow-sm relative z-20" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                 <button
@@ -106,6 +117,10 @@ export function ProductCard({ product }: ProductCardProps) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (product.stock !== undefined && quantity >= product.stock) {
+                      alert(`Only ${product.stock} items available in stock.`);
+                      return;
+                    }
                     updateQuantity(product.id, 1);
                   }}
                   className="p-1.5 hover:bg-emerald-700 transition-colors"

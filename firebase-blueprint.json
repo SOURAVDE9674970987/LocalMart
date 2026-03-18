@@ -2,84 +2,135 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "A user of the application (customer, vendor, or driver)",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "vendor", "driver", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product information",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "role": { "type": "string", "enum": ["customer", "vendor", "delivery"] },
-        "profileImage": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "shopId": { "type": "string" },
+        "stock": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviews": { "type": "number" }
       },
-      "required": ["name", "email", "role"]
+      "required": ["name", "price", "shopId"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Order information",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "shopId": { "type": "string" },
+        "shopName": { "type": "string" },
+        "shopAddress": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" },
+              "image": { "type": "string" }
+            }
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "preparing", "ready", "delivering", "completed", "rejected"] },
+        "deliveryAddress": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deliveryFee": { "type": "number" },
+        "commission": { "type": "number" },
+        "vendorEarnings": { "type": "number" },
+        "driverEarnings": { "type": "number" },
+        "distanceKm": { "type": "number" },
+        "appEarnings": { "type": "number" },
+        "driverId": { "type": "string" }
+      },
+      "required": ["customerId", "shopId", "totalAmount", "status", "createdAt"]
     },
     "Shop": {
       "title": "Shop",
-      "description": "A vendor's shop",
+      "description": "Shop information",
       "type": "object",
       "properties": {
-        "vendorId": { "type": "string", "description": "UID of the vendor who owns this shop" },
         "name": { "type": "string" },
+        "description": { "type": "string" },
         "image": { "type": "string" },
         "rating": { "type": "number" },
         "deliveryTime": { "type": "string" },
         "deliveryFee": { "type": "number" },
-        "categories": { "type": "array", "items": { "type": "string" } }
-      },
-      "required": ["vendorId", "name", "image"]
-    },
-    "Product": {
-      "title": "Product",
-      "description": "An item sold in a shop",
-      "type": "object",
-      "properties": {
-        "shopId": { "type": "string" },
-        "name": { "type": "string" },
-        "price": { "type": "number" },
-        "originalPrice": { "type": "number" },
-        "image": { "type": "string" },
-        "unit": { "type": "string" },
-        "category": { "type": "string" },
-        "stock": { "type": "number" }
-      },
-      "required": ["shopId", "name", "price", "image", "unit"]
-    },
-    "Order": {
-      "title": "Order",
-      "description": "A customer's order from a shop",
-      "type": "object",
-      "properties": {
-        "customerId": { "type": "string" },
-        "shopId": { "type": "string" },
-        "driverId": { "type": "string" },
-        "items": { 
+        "minimumOrder": { "type": "number" },
+        "tags": {
           "type": "array",
-          "description": "Array of cart items with quantities"
+          "items": { "type": "string" }
         },
-        "totalAmount": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "preparing", "ready", "delivering", "completed"] },
-        "deliveryAddress": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "address": { "type": "string" },
+        "vendorId": { "type": "string" }
       },
-      "required": ["customerId", "shopId", "items", "totalAmount", "status", "deliveryAddress"]
+      "required": ["name", "vendorId"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Category information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "Stores user profiles and roles"
-    },
-    "/shops/{shopId}": {
-      "schema": { "$ref": "#/entities/Shop" },
-      "description": "Stores shop details"
+      "description": "User profiles"
     },
     "/products/{productId}": {
       "schema": { "$ref": "#/entities/Product" },
-      "description": "Stores products belonging to shops"
+      "description": "Products available for purchase"
     },
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
-      "description": "Stores customer orders"
+      "description": "Orders placed by customers"
+    },
+    "/shops/{shopId}": {
+      "schema": { "$ref": "#/entities/Shop" },
+      "description": "Shops available on the platform"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories"
     }
   }
 }

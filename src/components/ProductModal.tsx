@@ -157,7 +157,11 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
           </div>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
-            {quantity === 0 ? (
+            {product.stock !== undefined && product.stock <= 0 ? (
+              <div className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 py-4 rounded-2xl font-bold flex items-center justify-center border border-red-200 dark:border-red-800/50">
+                Currently Out of Stock
+              </div>
+            ) : quantity === 0 ? (
               <button
                 onClick={(e) => {
                   e.preventDefault();
@@ -188,6 +192,10 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (product.stock !== undefined && quantity >= product.stock) {
+                      alert(`Only ${product.stock} items available in stock.`);
+                      return;
+                    }
                     updateQuantity(product.id, 1);
                   }}
                   className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"

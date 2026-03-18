@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Heart, ShoppingCart } from 'lucide-react';
 import { useCart } from '../CartContext';
-import { products } from '../data';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { Product } from './VendorDashboard';
 
 interface WishlistModalProps {
   isOpen: boolean;
@@ -10,10 +12,35 @@ interface WishlistModalProps {
 
 export function WishlistModal({ isOpen, onClose }: WishlistModalProps) {
   const { wishlist, toggleWishlist, addToCart } = useCart();
+  const [wishlistProducts, setWishlistProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && wishlist.length > 0) {
+      const fetchWishlistProducts = async () => {
+        setLoading(true);
+        try {
+          const productsData: Product[] = [];
+          for (const id of wishlist) {
+            const productDoc = await getDoc(doc(db, 'products', id));
+            if (productDoc.exists()) {
+              productsData.push({ id: productDoc.id, ...productDoc.data() } as Product);
+            }
+          }
+          setWishlistProducts(productsData);
+        } catch (error) {
+          console.error("Error fetching wishlist products:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchWishlistProducts();
+    } else if (isOpen && wishlist.length === 0) {
+      setWishlistProducts([]);
+    }
+  }, [isOpen, wishlist]);
 
   if (!isOpen) return null;
-
-  const wishlistProducts = products.filter(p => wishlist.includes(p.id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">

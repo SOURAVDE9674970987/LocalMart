@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, MapPin, Navigation } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -19,14 +19,47 @@ interface AddressModalProps {
   onSave: (address: string) => void;
 }
 
+function MapUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo(center, map.getZoom());
+  }, [center, map]);
+  return null;
+}
+
 function LocationMarker({ position, setPosition, onLocationSelect }: { position: [number, number], setPosition: (pos: [number, number]) => void, onLocationSelect: (lat: number, lng: number) => void }) {
-  useMapEvents({
+  const map = useMapEvents({
     click(e) {
       setPosition([e.latlng.lat, e.latlng.lng]);
+      map.flyTo(e.latlng, map.getZoom());
       onLocationSelect(e.latlng.lat, e.latlng.lng);
     },
   });
-  return <Marker position={position} />;
+
+  const markerRef = useRef<L.Marker>(null);
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = markerRef.current;
+        if (marker != null) {
+          const pos = marker.getLatLng();
+          setPosition([pos.lat, pos.lng]);
+          map.flyTo(pos, map.getZoom());
+          onLocationSelect(pos.lat, pos.lng);
+        }
+      },
+    }),
+    [setPosition, onLocationSelect, map],
+  );
+
+  return (
+    <Marker 
+      draggable={true}
+      eventHandlers={eventHandlers}
+      position={position} 
+      ref={markerRef}
+    />
+  );
 }
 
 export function AddressModal({ isOpen, onClose, currentAddress, onSave }: AddressModalProps) {
@@ -43,10 +76,20 @@ export function AddressModal({ isOpen, onClose, currentAddress, onSave }: Addres
   }, [isOpen, currentAddress]);
 
   const validateAddress = (addr: string) => {
-    if (!addr.trim()) return "Address cannot be empty.";
-    if (addr.trim().length < 10) return "Address is too short. Please enter a complete address.";
-    if (!/\d/.test(addr)) return "Address should include a building or house number.";
-    if (!/[a-zA-Z]/.test(addr)) return "Address should include a street name.";
+    const trimmed = addr.trim();
+    if (!trimmed) return "Address cannot be empty.";
+    if (trimmed.length < 10) return "Address is too short. Please enter a complete address.";
+    
+    // Check for building/house number
+    if (!/\d/.test(trimmed)) return "Address must include a building or house number.";
+    
+    // Check for street name (letters)
+    if (!/[a-zA-Z]/.test(trimmed)) return "Address must include a street name.";
+    
+    // Check for multiple words to ensure a complete address
+    const words = trimmed.split(/\s+/);
+    if (words.length < 3) return "Address seems incomplete. Please include building number, street name, and city/area.";
+
     return null;
   };
 
@@ -143,10 +186,11 @@ export function AddressModal({ isOpen, onClose, currentAddress, onSave }: Addres
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                <MapUpdater center={position} />
                 <LocationMarker position={position} setPosition={setPosition} onLocationSelect={fetchAddress} />
               </MapContainer>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Click on the map to adjust your exact location.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Click on the map or drag the marker to adjust your exact location.</p>
           </div>
 
           <form id="address-form" onSubmit={handleSubmit}>

@@ -13,6 +13,7 @@ import { ShopList } from './components/ShopList';
 import { ShopDetails } from './components/ShopDetails';
 import { VendorDashboard } from './components/VendorDashboard';
 import { DeliveryDashboard } from './components/DeliveryDashboard';
+import { GlobalSearchResults } from './components/GlobalSearchResults';
 import { Auth, UserRole } from './components/Auth';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -24,6 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
@@ -74,8 +76,13 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  const handleCheckoutSuccess = () => {
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
+
+  const handleCheckoutSuccess = (orderId?: string) => {
     setIsCartOpen(false);
+    if (orderId) {
+      setTrackingOrderId(orderId);
+    }
     setIsTrackingModalOpen(true);
   };
 
@@ -103,13 +110,17 @@ export default function App() {
           onWishlistClick={() => setIsWishlistModalOpen(true)}
           onOrderHistoryClick={() => setIsOrderHistoryModalOpen(true)}
           userRole={userRole}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
         />
         
         <main className="max-w-7xl mx-auto">
           {userRole === 'vendor' ? (
-            <VendorDashboard />
+            <VendorDashboard onAddressChange={setAddress} />
           ) : userRole === 'delivery' ? (
             <DeliveryDashboard />
+          ) : searchQuery ? (
+            <GlobalSearchResults searchQuery={searchQuery} />
           ) : selectedShopId ? (
             <ShopDetails 
               shopId={selectedShopId} 
@@ -165,6 +176,7 @@ export default function App() {
           isOpen={isCartOpen} 
           onClose={() => setIsCartOpen(false)} 
           onCheckoutSuccess={handleCheckoutSuccess}
+          address={address}
         />
         <AddressModal 
           isOpen={isAddressModalOpen} 
@@ -176,6 +188,7 @@ export default function App() {
           isOpen={isTrackingModalOpen} 
           onClose={() => setIsTrackingModalOpen(false)} 
           address={address}
+          orderId={trackingOrderId}
         />
         <WishlistModal 
           isOpen={isWishlistModalOpen} 
@@ -184,6 +197,10 @@ export default function App() {
         <OrderHistoryModal 
           isOpen={isOrderHistoryModalOpen} 
           onClose={() => setIsOrderHistoryModalOpen(false)} 
+          onTrackOrder={(orderId) => {
+            setTrackingOrderId(orderId);
+            setIsTrackingModalOpen(true);
+          }}
         />
       </div>
     </CartProvider>

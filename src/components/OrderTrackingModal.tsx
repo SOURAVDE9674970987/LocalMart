@@ -1,21 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { X, MapPin, Package, CheckCircle2, Navigation } from 'lucide-react';
+import { X, MapPin, Package, CheckCircle2, Navigation, ClipboardList, PackageOpen, Truck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface OrderTrackingModalProps {
   isOpen: boolean;
   onClose: () => void;
   address: string;
+  orderId?: string | null;
 }
 
-export function OrderTrackingModal({ isOpen, onClose, address }: OrderTrackingModalProps) {
+export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderTrackingModalProps) {
   const [progress, setProgress] = useState(0);
   const [eta, setEta] = useState(10);
+  const [orderStatus, setOrderStatus] = useState<string>('pending');
+  const [orderAddress, setOrderAddress] = useState<string>(address);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && orderId) {
+      setOrderAddress(address); // Reset to default address initially
+      const orderRef = doc(db, 'orders', orderId);
+      const unsubscribe = onSnapshot(orderRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setOrderStatus(data.status);
+          if (data.deliveryAddress) {
+            setOrderAddress(data.deliveryAddress);
+          }
+          
+          // Update progress and ETA based on status
+          switch (data.status) {
+            case 'pending':
+              setProgress(0);
+              setEta(15);
+              break;
+            case 'accepted':
+            case 'preparing':
+              setProgress(33);
+              setEta(12);
+              break;
+            case 'ready':
+              setProgress(50);
+              setEta(10);
+              break;
+            case 'delivering':
+              setProgress(66);
+              setEta(5);
+              break;
+            case 'completed':
+              setProgress(100);
+              setEta(0);
+              break;
+            default:
+              setProgress(0);
+              setEta(15);
+          }
+        }
+      });
+
+      return () => unsubscribe();
+    } else if (isOpen) {
+      // Fallback if no orderId
       setProgress(0);
       setEta(10);
       
@@ -36,11 +84,23 @@ export function OrderTrackingModal({ isOpen, onClose, address }: OrderTrackingMo
 
       return () => clearInterval(interval);
     }
-  }, [isOpen]);
+  }, [isOpen, orderId]);
 
   if (!isOpen) return null;
 
   const position: [number, number] = [40.7128, -74.0060]; // Mock driver location
+
+  const getStatusText = () => {
+    switch (orderStatus) {
+      case 'pending': return 'Order Placed';
+      case 'accepted': return 'Order Accepted';
+      case 'preparing': return 'Packing Items';
+      case 'ready': return 'Waiting for Driver';
+      case 'delivering': return 'On the Way';
+      case 'completed': return 'Delivered';
+      default: return 'Processing';
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -79,27 +139,62 @@ export function OrderTrackingModal({ isOpen, onClose, address }: OrderTrackingMo
           <div className="flex justify-between items-end mb-6">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Estimated Delivery</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                {Math.ceil(eta)} <span className="text-lg font-medium text-gray-500 dark:text-gray-400">mins</span>
-              </p>
+              {orderStatus === 'completed' ? (
+                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                  Delivered
+                </p>
+              ) : (
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {Math.ceil(eta)} <span className="text-lg font-medium text-gray-500 dark:text-gray-400">mins</span>
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Delivering to</p>
-              <p className="text-sm font-medium text-gray-900 dark:text-white max-w-[150px] truncate">{address}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white max-w-[150px] truncate">{orderAddress}</p>
             </div>
           </div>
 
-          <div className="relative pt-1 mb-8">
-            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+          <div className="relative mb-8">
+            <div className="absolute top-5 left-[12.5%] w-[75%] h-1 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div 
-                style={{ width: `${progress}%` }} 
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500 transition-all duration-500"
+                className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full transition-all duration-500"
+                style={{ width: `${progress}%` }}
               ></div>
             </div>
-            <div className="flex justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-              <span className="text-emerald-600 dark:text-emerald-400">Order Placed</span>
-              <span className={progress >= 50 ? 'text-emerald-600 dark:text-emerald-400' : ''}>On the way</span>
-              <span className={progress >= 100 ? 'text-emerald-600 dark:text-emerald-400' : ''}>Delivered</span>
+            
+            <div className="relative flex justify-between">
+              {/* Step 1: Placed */}
+              <div className="flex flex-col items-center w-1/4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  <ClipboardList className="w-5 h-5" />
+                </div>
+                <span className={`text-xs font-medium mt-2 text-center ${progress >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Order Placed</span>
+              </div>
+
+              {/* Step 2: Preparing */}
+              <div className="flex flex-col items-center w-1/4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 33 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  <PackageOpen className="w-5 h-5" />
+                </div>
+                <span className={`text-xs font-medium mt-2 text-center ${progress >= 33 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Preparing</span>
+              </div>
+
+              {/* Step 3: Out for Delivery */}
+              <div className="flex flex-col items-center w-1/4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 66 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  <Truck className="w-5 h-5" />
+                </div>
+                <span className={`text-xs font-medium mt-2 text-center ${progress >= 66 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Out for Delivery</span>
+              </div>
+
+              {/* Step 4: Delivered */}
+              <div className="flex flex-col items-center w-1/4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 100 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <span className={`text-xs font-medium mt-2 text-center ${progress >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Delivered</span>
+              </div>
             </div>
           </div>
 
@@ -108,12 +203,16 @@ export function OrderTrackingModal({ isOpen, onClose, address }: OrderTrackingMo
               <Navigation className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white">John Doe</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Your delivery partner</p>
+              <p className="font-semibold text-gray-900 dark:text-white">{getStatusText()}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {orderStatus === 'delivering' ? 'Your delivery partner is on the way' : 'Waiting for updates...'}
+              </p>
             </div>
-            <button className="ml-auto px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-              Call
-            </button>
+            {orderStatus === 'delivering' && (
+              <button className="ml-auto px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                Call
+              </button>
+            )}
           </div>
         </div>
       </div>

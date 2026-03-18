@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Star, Clock, Info, Search } from 'lucide-react';
-import { shops, products } from '../data';
 import { ProductCard } from './ProductCard';
+import { db } from '../firebase';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { Shop, Product } from './VendorDashboard';
 
 interface ShopDetailsProps {
   shopId: string;
@@ -10,18 +12,63 @@ interface ShopDetailsProps {
 
 export function ShopDetails({ shopId, onBack }: ShopDetailsProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const shop = shops.find(s => s.id === shopId);
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchShopDetails = async () => {
+      try {
+        const shopDoc = await getDoc(doc(db, 'shops', shopId));
+        if (shopDoc.exists()) {
+          setShop({ id: shopDoc.id, ...shopDoc.data() } as Shop);
+        }
+      } catch (error) {
+        console.error("Error fetching shop details:", error);
+      }
+    };
+
+    fetchShopDetails();
+
+    const productsQuery = query(collection(db, 'products'), where('shopId', '==', shopId));
+    const unsubscribe = onSnapshot(productsQuery, (snapshot) => {
+      const productsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Product[];
+      setProducts(productsData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching products:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [shopId]);
   
   const shopProducts = useMemo(() => {
-    let filtered = products.filter(p => p.shopId === shopId);
+    let filtered = products;
     if (searchQuery) {
       filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
     }
     return filtered;
-  }, [shopId, searchQuery]);
+  }, [products, searchQuery]);
 
-  if (!shop) return null;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mb-4"></div>
+        <p className="text-gray-500">Loading shop details...</p>
+      </div>
+    );
+  }
+
+  if (!shop) return (
+    <div className="text-center py-20">
+      <p className="text-gray-500 text-lg mb-4">Shop not found.</p>
+      <button onClick={onBack} className="text-emerald-600 font-medium">Go Back</button>
+    </div>
+  );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">

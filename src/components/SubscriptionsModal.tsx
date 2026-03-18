@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Calendar, Play, Pause, Trash2 } from 'lucide-react';
 import { useCart } from '../CartContext';
-import { products } from '../data';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { Product } from './VendorDashboard';
 
 interface SubscriptionsModalProps {
   isOpen: boolean;
@@ -10,6 +12,33 @@ interface SubscriptionsModalProps {
 
 export function SubscriptionsModal({ isOpen, onClose }: SubscriptionsModalProps) {
   const { subscriptions, toggleSubscriptionStatus, removeSubscription } = useCart();
+  const [subscriptionProducts, setSubscriptionProducts] = useState<Record<string, Product>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && subscriptions.length > 0) {
+      const fetchProducts = async () => {
+        setLoading(true);
+        try {
+          const productsData: Record<string, Product> = {};
+          for (const sub of subscriptions) {
+            if (!subscriptionProducts[sub.productId]) {
+              const productDoc = await getDoc(doc(db, 'products', sub.productId));
+              if (productDoc.exists()) {
+                productsData[sub.productId] = { id: productDoc.id, ...productDoc.data() } as Product;
+              }
+            }
+          }
+          setSubscriptionProducts(prev => ({ ...prev, ...productsData }));
+        } catch (error) {
+          console.error("Error fetching subscription products:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchProducts();
+    }
+  }, [isOpen, subscriptions]);
 
   if (!isOpen) return null;
 
@@ -52,7 +81,7 @@ export function SubscriptionsModal({ isOpen, onClose }: SubscriptionsModalProps)
           ) : (
             <div className="space-y-4">
               {subscriptions.map((sub) => {
-                const product = products.find(p => p.id === sub.productId);
+                const product = subscriptionProducts[sub.productId];
                 if (!product) return null;
 
                 return (
