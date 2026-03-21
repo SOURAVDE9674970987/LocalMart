@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Package, CheckCircle, XCircle, Clock, DollarSign, TrendingUp, Plus, Minus, Trash2, Store, X, MapPin } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { AddressModal } from './AddressModal';
 
 // Fix Leaflet's default icon path issues
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -23,14 +24,37 @@ function MapUpdater({ center }: { center: [number, number] }) {
 }
 
 function LocationMarker({ position, setPosition, onLocationSelect }: { position: [number, number] | null, setPosition: (pos: [number, number]) => void, onLocationSelect: (lat: number, lng: number) => void }) {
-  useMapEvents({
+  const markerRef = useRef<L.Marker>(null);
+  const map = useMapEvents({
     click(e) {
       setPosition([e.latlng.lat, e.latlng.lng]);
       onLocationSelect(e.latlng.lat, e.latlng.lng);
+      map.flyTo(e.latlng, map.getZoom());
     },
   });
+
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = markerRef.current;
+        if (marker != null) {
+          const pos = marker.getLatLng();
+          setPosition([pos.lat, pos.lng]);
+          onLocationSelect(pos.lat, pos.lng);
+          map.flyTo(pos, map.getZoom());
+        }
+      },
+    }),
+    [setPosition, onLocationSelect, map],
+  );
+
   return position === null ? null : (
-    <Marker position={position}></Marker>
+    <Marker 
+      position={position}
+      draggable={true}
+      eventHandlers={eventHandlers}
+      ref={markerRef}
+    ></Marker>
   );
 }
 
@@ -73,6 +97,7 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -88,6 +113,7 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
   const skipGeocodeRef = useRef(false);
 
   const performReverseGeocoding = async (lat: number, lng: number) => {
+    setIsGeocoding(true);
     try {
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await response.json();
@@ -97,6 +123,8 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
       }
     } catch (error) {
       console.error("Error reverse geocoding:", error);
+    } finally {
+      setIsGeocoding(false);
     }
   };
 
@@ -270,6 +298,32 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
     } catch (error) {
       console.error("Error creating shop:", error);
       setError("Failed to create shop. Please try again.");
+    }
+  };
+
+  const handleUpdateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shop || !newShopAddress.trim()) return;
+    
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const shopRef = doc(db, 'shops', shop.id);
+      const newLocation = shopLocation ? { lat: shopLocation[0], lng: shopLocation[1] } : null;
+      await updateDoc(shopRef, {
+        address: newShopAddress,
+        location: newLocation
+      });
+      setShop({ ...shop, address: newShopAddress, location: newLocation });
+      if (onAddressChange) {
+        onAddressChange(newShopAddress);
+      }
+      setIsEditingLocation(false);
+    } catch (error) {
+      console.error("Error updating location:", error);
+      setError("Failed to update location. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -471,6 +525,16 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
           <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-2 transition-colors text-left group">
             <MapPin className="w-3 h-3 mr-1 shrink-0 text-emerald-500" />
             <span className="truncate max-w-[250px] sm:max-w-[300px]">Shop Location: <strong className="dark:text-gray-200">{shop.address || 'Address not set'}</strong></span>
+            <button 
+              onClick={() => {
+                setNewShopAddress(shop.address || '');
+                setShopLocation(shop.location ? [shop.location.lat, shop.location.lng] : null);
+                setIsEditingLocation(true);
+              }} 
+              className="ml-2 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline"
+            >
+              Edit
+            </button>
           </div>
         </div>
         <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
@@ -504,7 +568,7 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
               orders.map((order) => (
                 <div key={order.id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <div className="flex items-center gap-3 mb-1">
+                    <div className="flex items-center gap-3 mb-2">
                       <span className="font-bold text-gray-900 dark:text-white">{order.id}</span>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                         order.status === 'pending' 
@@ -514,9 +578,18 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
                         {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Customer: {order.customerName || order.customerId}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      {order.customerPhoto ? (
+                        <img src={order.customerPhoto} alt={order.customerName} className="w-6 h-6 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-400">
+                          {(order.customerName || order.customerId).charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {order.customerName || order.customerId}
+                      </p>
+                    </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {order.itemsCount} items • ${order.total.toFixed(2)} • {order.time}
                     </p>
@@ -799,6 +872,37 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
           </div>
         </div>
       )}
+
+      {/* Edit Location Modal */}
+      <AddressModal
+        isOpen={isEditingLocation}
+        onClose={() => setIsEditingLocation(false)}
+        currentAddress={shop.address || ''}
+        initialCoordinates={shop.location ? [shop.location.lat, shop.location.lng] : null}
+        onSave={async (address, coordinates) => {
+          if (!shop) return;
+          setError(null);
+          setIsSubmitting(true);
+          try {
+            const shopRef = doc(db, 'shops', shop.id);
+            const newLocation = coordinates ? { lat: coordinates[0], lng: coordinates[1] } : null;
+            await updateDoc(shopRef, {
+              address: address,
+              location: newLocation
+            });
+            setShop({ ...shop, address: address, location: newLocation });
+            if (onAddressChange) {
+              onAddressChange(address);
+            }
+            setIsEditingLocation(false);
+          } catch (error) {
+            console.error("Error updating location:", error);
+            setError("Failed to update location. Please try again.");
+          } finally {
+            setIsSubmitting(false);
+          }
+        }}
+      />
     </div>
   );
 }

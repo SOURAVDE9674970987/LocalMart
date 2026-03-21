@@ -114,6 +114,7 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
         const orderRef = await addDoc(collection(db, 'orders'), {
           customerId,
           customerName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Guest',
+          customerPhoto: auth.currentUser?.photoURL || null,
           shopId,
           shopName,
           shopAddress,

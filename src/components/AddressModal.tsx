@@ -16,7 +16,8 @@ interface AddressModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentAddress: string;
-  onSave: (address: string) => void;
+  initialCoordinates?: [number, number] | null;
+  onSave: (address: string, coordinates?: [number, number]) => void;
 }
 
 function MapUpdater({ center }: { center: [number, number] }) {
@@ -62,18 +63,46 @@ function LocationMarker({ position, setPosition, onLocationSelect }: { position:
   );
 }
 
-export function AddressModal({ isOpen, onClose, currentAddress, onSave }: AddressModalProps) {
+export function AddressModal({ isOpen, onClose, currentAddress, initialCoordinates, onSave }: AddressModalProps) {
   const [addressInput, setAddressInput] = useState(currentAddress);
   const [error, setError] = useState<string | null>(null);
-  const [position, setPosition] = useState<[number, number]>([40.7128, -74.0060]); // Default to NYC
+  const [position, setPosition] = useState<[number, number]>(initialCoordinates || [40.7128, -74.0060]); // Default to NYC
   const [isLocating, setIsLocating] = useState(false);
+
+  const skipGeocodeRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       setAddressInput(currentAddress);
+      if (initialCoordinates) {
+        setPosition(initialCoordinates);
+      }
       setError(null);
     }
-  }, [isOpen, currentAddress]);
+  }, [isOpen, currentAddress, initialCoordinates]);
+
+  useEffect(() => {
+    if (!addressInput.trim() || isLocating) return;
+    if (skipGeocodeRef.current) {
+      skipGeocodeRef.current = false;
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressInput)}`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+          const { lat, lon } = data[0];
+          setPosition([parseFloat(lat), parseFloat(lon)]);
+        }
+      } catch (error) {
+        console.error("Error geocoding address:", error);
+      }
+    }, 1000);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [addressInput, isLocating]);
 
   const validateAddress = (addr: string) => {
     const trimmed = addr.trim();
@@ -101,7 +130,7 @@ export function AddressModal({ isOpen, onClose, currentAddress, onSave }: Addres
       return;
     }
     
-    onSave(addressInput.trim());
+    onSave(addressInput.trim(), position);
     onClose();
   };
 
@@ -110,6 +139,7 @@ export function AddressModal({ isOpen, onClose, currentAddress, onSave }: Addres
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await response.json();
       if (data && data.display_name) {
+        skipGeocodeRef.current = true;
         setAddressInput(data.display_name);
         setError(null);
       }
