@@ -14,6 +14,8 @@ import { ShopDetails } from './components/ShopDetails';
 import { VendorDashboard } from './components/VendorDashboard';
 import { DeliveryDashboard } from './components/DeliveryDashboard';
 import { GlobalSearchResults } from './components/GlobalSearchResults';
+import { MobileNavigation } from './components/MobileNavigation';
+import { ProfileModal } from './components/ProfileModal';
 import { Auth, UserRole } from './components/Auth';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -33,6 +35,8 @@ export default function App() {
   const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
   const [address, setAddress] = useState('Home - 10001');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -112,9 +116,11 @@ export default function App() {
           userRole={userRole}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
+          isMobileSearchOpen={isMobileSearchOpen}
+          setIsMobileSearchOpen={setIsMobileSearchOpen}
         />
         
-        <main className="max-w-7xl mx-auto">
+        <main className="max-w-7xl mx-auto pb-20 md:pb-0">
           {userRole === 'vendor' ? (
             <VendorDashboard onAddressChange={setAddress} />
           ) : userRole === 'delivery' ? (
@@ -128,12 +134,16 @@ export default function App() {
             />
           ) : (
             <>
-              <section className="bg-emerald-600 dark:bg-emerald-700 text-white px-4 py-8 sm:px-6 lg:px-8 mx-4 sm:mx-6 lg:mx-8 mt-6 rounded-3xl overflow-hidden relative shadow-lg transition-colors">
+              <section className="bg-emerald-600 dark:bg-emerald-700 text-white px-6 py-10 sm:px-10 lg:px-12 mx-4 sm:mx-6 lg:mx-8 mt-6 rounded-[2rem] overflow-hidden relative shadow-[0_20px_40px_-15px_rgba(5,150,105,0.4)] transition-colors">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 opacity-90" />
+                <div className="absolute -right-20 -top-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+                <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl" />
+                
                 <div className="relative z-10 max-w-lg">
-                  <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
+                  <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-4 leading-[1.1]">
                     Groceries delivered in <span className="text-yellow-300">10 minutes</span>
                   </h1>
-                  <p className="text-emerald-100 text-lg mb-6">
+                  <p className="text-emerald-50 text-lg mb-8 font-medium opacity-90">
                     Fresh vegetables, pharmacy, and daily essentials at your doorstep.
                   </p>
                   <button 
@@ -143,9 +153,10 @@ export default function App() {
                         shopListElement.scrollIntoView({ behavior: 'smooth' });
                       }
                     }}
-                    className="bg-white text-emerald-600 dark:text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-colors shadow-sm"
+                    className="bg-white text-emerald-600 hover:bg-emerald-50 font-bold py-3.5 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center gap-2"
                   >
                     Order Now
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                   </button>
                 </div>
                 <div className="absolute right-0 bottom-0 top-0 w-1/2 hidden md:block opacity-20 pointer-events-none">
@@ -202,6 +213,55 @@ export default function App() {
             setIsTrackingModalOpen(true);
           }}
         />
+        <ProfileModal 
+          isOpen={isProfileModalOpen} 
+          onClose={() => setIsProfileModalOpen(false)} 
+        />
+
+        {userRole === 'customer' && (
+          <MobileNavigation 
+            activeTab={isCartOpen ? 'cart' : isOrderHistoryModalOpen ? 'orders' : isProfileModalOpen ? 'profile' : (searchQuery || isMobileSearchOpen) ? 'search' : 'home'}
+            onHomeClick={() => {
+              setSearchQuery('');
+              setSelectedShopId(null);
+              setSelectedCategory(null);
+              setIsCartOpen(false);
+              setIsOrderHistoryModalOpen(false);
+              setIsProfileModalOpen(false);
+              setIsMobileSearchOpen(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSearchClick={() => {
+              setIsCartOpen(false);
+              setIsOrderHistoryModalOpen(false);
+              setIsProfileModalOpen(false);
+              setIsMobileSearchOpen(true);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              setTimeout(() => {
+                const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+                if (searchInput) searchInput.focus();
+              }, 100);
+            }}
+            onOrdersClick={() => {
+              setIsCartOpen(false);
+              setIsProfileModalOpen(false);
+              setIsMobileSearchOpen(false);
+              setIsOrderHistoryModalOpen(true);
+            }}
+            onCartClick={() => {
+              setIsOrderHistoryModalOpen(false);
+              setIsProfileModalOpen(false);
+              setIsMobileSearchOpen(false);
+              setIsCartOpen(true);
+            }}
+            onProfileClick={() => {
+              setIsCartOpen(false);
+              setIsOrderHistoryModalOpen(false);
+              setIsMobileSearchOpen(false);
+              setIsProfileModalOpen(true);
+            }}
+          />
+        )}
       </div>
     </CartProvider>
   );

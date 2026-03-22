@@ -103,22 +103,26 @@ export function ShopList({ selectedCategory, onSelectShop }: ShopListProps) {
 
   return (
     <section className="py-8 px-4 sm:px-6 lg:px-8">
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Shops Near You</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Discover local stores delivering to your area</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Shops Near You</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">Discover local stores delivering to your area</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {filteredShops.map(shop => (
           <ShopCard key={shop.id} shop={shop as any} onClick={() => onSelectShop(shop.id)} />
         ))}
       </div>
       
       {filteredShops.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400 text-lg">No shops found for this category.</p>
+        <div className="text-center py-20 bg-gray-50 dark:bg-gray-800/50 rounded-[2rem] border border-gray-100 dark:border-gray-700/50 mt-8">
+          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No shops found</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-lg">Try selecting a different category or check back later.</p>
         </div>
       )}
     </section>

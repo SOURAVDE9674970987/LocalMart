@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, MapPin, Package, CheckCircle2, Navigation, ClipboardList, PackageOpen, Truck } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -88,8 +85,6 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
 
   if (!isOpen) return null;
 
-  const position: [number, number] = [40.7128, -74.0060]; // Mock driver location
-
   const getStatusText = () => {
     switch (orderStatus) {
       case 'pending': return 'Order Placed';
@@ -121,18 +116,6 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
-
-        <div className="h-64 bg-gray-100 dark:bg-gray-800 relative z-0">
-          <MapContainer center={position} zoom={14} style={{ height: '100%', width: '100%', zIndex: 0 }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <Marker position={position}>
-              <Popup>Driver is here</Popup>
-            </Marker>
-          </MapContainer>
         </div>
 
         <div className="p-6 bg-white dark:bg-gray-900 z-10 relative shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)]">

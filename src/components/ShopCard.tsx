@@ -49,35 +49,38 @@ export function ShopCard({ shop, onClick }: ShopCardProps) {
   return (
     <div 
       onClick={onClick}
-      className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden border border-gray-100 dark:border-gray-700 group"
+      className="bg-white dark:bg-gray-800 rounded-[2rem] shadow-sm hover:shadow-xl transition-all duration-500 cursor-pointer overflow-hidden border border-gray-100/50 dark:border-gray-700/50 group transform hover:-translate-y-1"
     >
-      <div className="relative h-40 overflow-hidden">
+      <div className="relative h-56 overflow-hidden">
         <img 
           src={shop.image} 
           alt={shop.name} 
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-          <h3 className="text-white font-bold text-lg leading-tight">{shop.name}</h3>
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-            <span className="text-xs font-bold text-gray-900 dark:text-white">{shop.rating}</span>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-90 transition-opacity duration-500 group-hover:opacity-100" />
+        
+        <div className="absolute top-4 right-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg border border-white/20 dark:border-gray-700/50 transform group-hover:scale-105 transition-transform duration-300">
+          <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 drop-shadow-sm" />
+          <span className="text-sm font-bold text-gray-900 dark:text-white">{shop.rating}</span>
+        </div>
+
+        <div className="absolute bottom-5 left-5 right-5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+          <h3 className="text-white font-black text-2xl sm:text-3xl leading-tight mb-2 drop-shadow-lg">{shop.name}</h3>
+          <div className="flex flex-wrap items-center gap-2 text-white/90 text-sm font-medium">
+            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-sm border border-white/10">
+              <Clock className="w-4 h-4 text-emerald-300" />
+              <span className="text-white">{shop.deliveryTime}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-sm border border-white/10">
+              <span className="text-white">${shop.deliveryFee.toFixed(2)} delivery</span>
+            </div>
           </div>
         </div>
       </div>
-      <div className="p-4">
-        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
-          <div className="flex items-center gap-1">
-            <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-500" />
-            <span className="font-medium">{shop.deliveryTime}</span>
-          </div>
-          <div className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-          <span>Delivery: ${shop.deliveryFee.toFixed(2)}</span>
-        </div>
+      <div className="p-5 bg-white dark:bg-gray-800 relative z-10">
         <div className="flex flex-wrap gap-2">
           {getNormalizedCategories().map((category: string) => (
-            <span key={category} className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md">
+            <span key={category} className="text-xs font-bold tracking-wide px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-sm">
               {category}
             </span>
           ))}

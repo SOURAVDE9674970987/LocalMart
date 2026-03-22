@@ -115,21 +115,23 @@ export function CategoryList({ selectedCategory, onSelectCategory }: CategoryLis
   if (categories.length === 0) return null;
 
   return (
-    <div className="py-6">
-      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 px-4 sm:px-6 lg:px-8">Shop by Category</h2>
-      <div className="flex overflow-x-auto hide-scrollbar px-4 sm:px-6 lg:px-8 gap-4 pb-4">
+    <div className="py-8">
+      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Shop by Category</h2>
+      </div>
+      <div className="flex overflow-x-auto hide-scrollbar px-4 sm:px-6 lg:px-8 gap-4 pb-4 snap-x">
         <button
           onClick={() => onSelectCategory(null)}
-          className={`flex flex-col items-center justify-center min-w-[80px] h-[100px] rounded-2xl transition-all ${
+          className={`flex flex-col items-center justify-center min-w-[90px] h-[110px] rounded-[1.5rem] transition-all duration-300 snap-start shrink-0 ${
             selectedCategory === null
-              ? 'bg-emerald-600 text-white shadow-md scale-105'
-              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+              ? 'bg-emerald-600 text-white shadow-[0_8px_20px_-6px_rgba(5,150,105,0.4)] scale-105 border border-emerald-500'
+              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-100/50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm hover:shadow-md'
           }`}
         >
-          <div className={`p-3 rounded-full mb-2 ${selectedCategory === null ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700'}`}>
+          <div className={`p-3.5 rounded-2xl mb-2.5 transition-colors ${selectedCategory === null ? 'bg-white/20 text-white' : 'bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400'}`}>
             <Icons.LayoutGrid className="w-6 h-6" />
           </div>
-          <span className="text-xs font-medium">All</span>
+          <span className="text-xs font-bold tracking-wide">All</span>
         </button>
         
         {categories.map((category) => {
@@ -140,16 +142,16 @@ export function CategoryList({ selectedCategory, onSelectCategory }: CategoryLis
             <button
               key={category.id}
               onClick={() => onSelectCategory(category.name)}
-              className={`flex flex-col items-center justify-center min-w-[80px] h-[100px] rounded-2xl transition-all ${
+              className={`flex flex-col items-center justify-center min-w-[90px] h-[110px] rounded-[1.5rem] transition-all duration-300 snap-start shrink-0 ${
                 isSelected
-                  ? 'bg-emerald-600 text-white shadow-md scale-105'
-                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-emerald-600 text-white shadow-[0_8px_20px_-6px_rgba(5,150,105,0.4)] scale-105 border border-emerald-500'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-100/50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm hover:shadow-md'
               }`}
             >
-              <div className={`p-3 rounded-full mb-2 ${isSelected ? 'bg-white/20' : category.color}`}>
+              <div className={`p-3.5 rounded-2xl mb-2.5 transition-colors ${isSelected ? 'bg-white/20 text-white' : category.color}`}>
                 <IconComponent className="w-6 h-6" />
               </div>
-              <span className="text-xs font-medium">{category.name}</span>
+              <span className="text-xs font-bold tracking-wide">{category.name}</span>
             </button>
           );
         })}
