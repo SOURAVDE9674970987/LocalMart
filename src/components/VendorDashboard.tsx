@@ -346,6 +346,15 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
       
       const docRef = await addDoc(collection(db, 'products'), productData);
       setInventory(prev => [...prev, { id: docRef.id, ...productData }]);
+      
+      // Update shop categories if needed
+      const currentCategories = shop.categories || [];
+      if (!currentCategories.includes(newProduct.category)) {
+        const updatedCategories = [...currentCategories, newProduct.category];
+        await updateDoc(doc(db, 'shops', shop.id), { categories: updatedCategories });
+        setShop({ ...shop, categories: updatedCategories });
+      }
+
       setIsAddingProduct(false);
       setNewProduct({ name: '', price: '', image: '', unit: '', category: '', stock: '10' });
     } catch (error) {
@@ -804,6 +813,7 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
                     <option value="Dairy">Dairy</option>
                     <option value="Bakery">Bakery</option>
                     <option value="Meat">Meat</option>
+                    <option value="Medicine">Medicine</option>
                   </select>
                 </div>
                 <div>
