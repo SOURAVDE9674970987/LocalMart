@@ -23,7 +23,11 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
   const [shops, setShops] = useState<Shop[]>([]);
 
   useEffect(() => {
-    if (isOpen && shops.length === 0) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectStatus = urlParams.get('redirect_status');
+    const needsShops = isOpen || redirectStatus === 'succeeded';
+
+    if (needsShops && shops.length === 0) {
       const fetchShops = async () => {
         try {
           const querySnapshot = await getDocs(collection(db, 'shops'));
@@ -39,6 +43,8 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
       fetchShops();
     }
   }, [isOpen, shops.length]);
+
+
 
   // Group items by shop
   const groupedItems = useMemo(() => {
@@ -71,10 +77,19 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
   };
 
   const handleCheckout = () => {
+    localStorage.setItem('localmart_pending_checkout', JSON.stringify({
+      tip,
+      isPromoApplied,
+      address
+    }));
     setIsCheckingOut(true);
   };
 
-  const handlePaymentSuccess = async () => {
+  const handlePaymentSuccess = async (savedTip?: number, savedPromoApplied?: boolean, savedAddress?: string) => {
+    const actualTip = savedTip !== undefined ? savedTip : tip;
+    const actualPromoApplied = savedPromoApplied !== undefined ? savedPromoApplied : isPromoApplied;
+    const actualAddress = savedAddress !== undefined ? savedAddress : address;
+
     try {
       const customerId = auth.currentUser?.uid || 'guest';
       const createdAt = new Date().toISOString();
@@ -89,7 +104,7 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
         // Calculate totals for this specific shop
         const shopTotalItemsPrice = itemsList.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         // Apply proportional discount if promo code used
-        const shopDiscount = isPromoApplied ? shopTotalItemsPrice * 0.1 : 0;
+        const shopDiscount = actualPromoApplied ? shopTotalItemsPrice * 0.1 : 0;
         const shopSubtotal = shopTotalItemsPrice - shopDiscount;
         
         // Delivery fee is fixed $1.5 per shop
@@ -104,7 +119,7 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
         const driverEarnings = distanceKm; // $1 per km
         const appEarnings = deliveryFee - driverEarnings + commission;
 
-        const shopTotalAmount = shopSubtotal + deliveryFee + (tip / Object.keys(groupedItems).length); // Split tip evenly
+        const shopTotalAmount = shopSubtotal + deliveryFee + (actualTip / Object.keys(groupedItems).length); // Split tip evenly
         
         const shopDetails = shops.find(s => s.id === shopId);
         const shopName = shopDetails?.name || (shopId === 'localmart' ? 'LocalMart Express' : 'Unknown Shop');
@@ -127,7 +142,7 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
           })),
           totalAmount: shopTotalAmount,
           status: 'pending',
-          deliveryAddress: address,
+          deliveryAddress: actualAddress,
           createdAt,
           deliveryFee,
           commission,
@@ -169,6 +184,34 @@ export function Cart({ isOpen, onClose, onCheckoutSuccess, address }: CartProps)
       alert("There was an error processing your order. Please contact support.");
     }
   };
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectStatus = urlParams.get('redirect_status');
+    
+    if (redirectStatus === 'succeeded' && items.length > 0 && shops.length > 0) {
+      // Prevent double processing
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      const pendingCheckoutStr = localStorage.getItem('localmart_pending_checkout');
+      let savedTip = 0;
+      let savedPromoApplied = false;
+      let savedAddress = address;
+      
+      if (pendingCheckoutStr) {
+        try {
+          const pending = JSON.parse(pendingCheckoutStr);
+          savedTip = pending.tip || 0;
+          savedPromoApplied = pending.isPromoApplied || false;
+          savedAddress = pending.address || address;
+        } catch (e) {
+          console.error("Error parsing pending checkout", e);
+        }
+      }
+      
+      handlePaymentSuccess(savedTip, savedPromoApplied, savedAddress);
+    }
+  }, [items.length, shops.length, address]);
 
   if (!isOpen) return null;
 
