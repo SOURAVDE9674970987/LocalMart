@@ -1,14 +1,15 @@
 import React from 'react';
-import { Star, Clock } from 'lucide-react';
+import { Star, Clock, MapPin } from 'lucide-react';
 import { Shop } from '../data';
 
 interface ShopCardProps {
   shop: Shop;
   onClick: () => void;
   key?: React.Key;
+  distance?: number;
 }
 
-export function ShopCard({ shop, onClick }: ShopCardProps) {
+export function ShopCard({ shop, onClick, distance }: ShopCardProps) {
   const getNormalizedCategories = () => {
     let shopCategories = shop.categories;
     let normalizedCategories: string[] = [];
@@ -74,6 +75,12 @@ export function ShopCard({ shop, onClick }: ShopCardProps) {
             <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-sm border border-white/10">
               <span className="text-white">${shop.deliveryFee.toFixed(2)} delivery</span>
             </div>
+            {distance !== undefined && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-sm border border-white/10">
+                <MapPin className="w-4 h-4 text-emerald-300" />
+                <span className="text-white">{distance.toFixed(1)} km</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

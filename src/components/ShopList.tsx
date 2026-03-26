@@ -8,28 +8,28 @@ import { Shop } from './VendorDashboard';
 interface ShopListProps {
   selectedCategory: string | null;
   onSelectShop: (shopId: string) => void;
+  customerLocation?: [number, number] | null;
 }
 
-export function ShopList({ selectedCategory, onSelectShop }: ShopListProps) {
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2)
+    ; 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const d = R * c; // Distance in km
+  return d;
+}
+
+export function ShopList({ selectedCategory, onSelectShop, customerLocation }: ShopListProps) {
   const [shops, setShops] = useState<Shop[]>([]);
-  const [activeShopIds, setActiveShopIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch products to determine which shops have inventory
-    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const shopIdsWithProducts = new Set<string>();
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.shopId) {
-          shopIdsWithProducts.add(data.shopId);
-        }
-      });
-      setActiveShopIds(shopIdsWithProducts);
-    }, (error) => {
-      console.error("Error fetching products for shop filtering:", error);
-    });
-
     const unsubscribeShops = onSnapshot(collection(db, 'shops'), (snapshot) => {
       const shopsData = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -43,14 +43,24 @@ export function ShopList({ selectedCategory, onSelectShop }: ShopListProps) {
     });
 
     return () => {
-      unsubscribeProducts();
       unsubscribeShops();
     };
   }, []);
 
   const filteredShops = useMemo(() => {
-    // First, filter out shops that have no products
-    const activeShops = shops.filter(shop => activeShopIds.has(shop.id));
+    let activeShops = shops;
+
+    // Filter by distance if customer location is available
+    if (customerLocation) {
+      activeShops = activeShops.filter(shop => {
+        if (!shop.location) return false; // If shop has no location, hide it
+        const distance = getDistance(
+          customerLocation[0], customerLocation[1],
+          shop.location.lat, shop.location.lng
+        );
+        return distance <= 10;
+      });
+    }
 
     if (!selectedCategory || selectedCategory === 'All') return activeShops;
     
@@ -90,13 +100,32 @@ export function ShopList({ selectedCategory, onSelectShop }: ShopListProps) {
       
       return normalizedCategories.includes(selectedCategory as Category);
     });
-  }, [selectedCategory, shops, activeShopIds]);
+  }, [selectedCategory, shops, customerLocation]);
 
   if (loading) {
     return (
       <section className="py-8 px-4 sm:px-6 lg:px-8 text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
         <p className="mt-4 text-gray-500">Loading shops...</p>
+      </section>
+    );
+  }
+
+  if (!customerLocation) {
+    return (
+      <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 border border-gray-100 dark:border-gray-700 shadow-sm">
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Set Your Location</h3>
+          <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            Please set your delivery location at the top of the page to see shops available within 10km of your area.
+          </p>
+        </div>
       </section>
     );
   }
@@ -111,9 +140,23 @@ export function ShopList({ selectedCategory, onSelectShop }: ShopListProps) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {filteredShops.map(shop => (
-          <ShopCard key={shop.id} shop={shop as any} onClick={() => onSelectShop(shop.id)} />
-        ))}
+        {filteredShops.map(shop => {
+          let distance = undefined;
+          if (customerLocation && shop.location) {
+            distance = getDistance(
+              customerLocation[0], customerLocation[1],
+              shop.location.lat, shop.location.lng
+            );
+          }
+          return (
+            <ShopCard 
+              key={shop.id} 
+              shop={shop as any} 
+              onClick={() => onSelectShop(shop.id)} 
+              distance={distance}
+            />
+          );
+        })}
       </div>
       
       {filteredShops.length === 0 && (

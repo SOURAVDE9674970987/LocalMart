@@ -51,6 +51,10 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
               setProgress(100);
               setEta(0);
               break;
+            case 'rejected':
+              setProgress(0);
+              setEta(0);
+              break;
             default:
               setProgress(0);
               setEta(15);
@@ -93,6 +97,7 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
       case 'ready': return 'Waiting for Driver';
       case 'delivering': return 'On the Way';
       case 'completed': return 'Delivered';
+      case 'rejected': return 'Order Cancelled';
       default: return 'Processing';
     }
   };
@@ -126,6 +131,10 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
                 <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
                   Delivered
                 </p>
+              ) : orderStatus === 'rejected' ? (
+                <p className="text-3xl font-bold text-rose-600 dark:text-rose-400">
+                  Cancelled
+                </p>
               ) : (
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
                   {Math.ceil(eta)} <span className="text-lg font-medium text-gray-500 dark:text-gray-400">mins</span>
@@ -141,54 +150,66 @@ export function OrderTrackingModal({ isOpen, onClose, address, orderId }: OrderT
           <div className="relative mb-8">
             <div className="absolute top-5 left-[12.5%] w-[75%] h-1 bg-gray-200 dark:bg-gray-700 rounded-full">
               <div 
-                className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${orderStatus === 'rejected' ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                style={{ width: `${orderStatus === 'rejected' ? 100 : progress}%` }}
               ></div>
             </div>
             
             <div className="relative flex justify-between">
               {/* Step 1: Placed */}
               <div className="flex flex-col items-center w-1/4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
-                  <ClipboardList className="w-5 h-5" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${orderStatus === 'rejected' ? 'bg-rose-500 text-white' : progress >= 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? <X className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
                 </div>
-                <span className={`text-xs font-medium mt-2 text-center ${progress >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Order Placed</span>
+                <span className={`text-xs font-medium mt-2 text-center ${orderStatus === 'rejected' ? 'text-rose-600 dark:text-rose-400' : progress >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? 'Cancelled' : 'Order Placed'}
+                </span>
               </div>
 
               {/* Step 2: Preparing */}
               <div className="flex flex-col items-center w-1/4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 33 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
-                  <PackageOpen className="w-5 h-5" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${orderStatus === 'rejected' ? 'bg-rose-500 text-white' : progress >= 33 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? <X className="w-5 h-5" /> : <PackageOpen className="w-5 h-5" />}
                 </div>
-                <span className={`text-xs font-medium mt-2 text-center ${progress >= 33 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Preparing</span>
+                <span className={`text-xs font-medium mt-2 text-center ${orderStatus === 'rejected' ? 'text-rose-600 dark:text-rose-400' : progress >= 33 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? 'Cancelled' : 'Preparing'}
+                </span>
               </div>
 
               {/* Step 3: Out for Delivery */}
               <div className="flex flex-col items-center w-1/4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 66 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
-                  <Truck className="w-5 h-5" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${orderStatus === 'rejected' ? 'bg-rose-500 text-white' : progress >= 66 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? <X className="w-5 h-5" /> : <Truck className="w-5 h-5" />}
                 </div>
-                <span className={`text-xs font-medium mt-2 text-center ${progress >= 66 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Out for Delivery</span>
+                <span className={`text-xs font-medium mt-2 text-center ${orderStatus === 'rejected' ? 'text-rose-600 dark:text-rose-400' : progress >= 66 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? 'Cancelled' : 'Out for Delivery'}
+                </span>
               </div>
 
               {/* Step 4: Delivered */}
               <div className="flex flex-col items-center w-1/4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${progress >= 100 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
-                  <CheckCircle2 className="w-5 h-5" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 transition-colors duration-500 ${orderStatus === 'rejected' ? 'bg-rose-500 text-white' : progress >= 100 ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? <X className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                 </div>
-                <span className={`text-xs font-medium mt-2 text-center ${progress >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>Delivered</span>
+                <span className={`text-xs font-medium mt-2 text-center ${orderStatus === 'rejected' ? 'text-rose-600 dark:text-rose-400' : progress >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {orderStatus === 'rejected' ? 'Cancelled' : 'Delivered'}
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center shrink-0">
-              <Navigation className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+          <div className={`rounded-2xl p-4 flex items-center gap-4 ${orderStatus === 'rejected' ? 'bg-rose-50 dark:bg-rose-900/20' : 'bg-gray-50 dark:bg-gray-800'}`}>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${orderStatus === 'rejected' ? 'bg-rose-100 dark:bg-rose-900/50' : 'bg-emerald-100 dark:bg-emerald-900/50'}`}>
+              {orderStatus === 'rejected' ? (
+                <X className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+              ) : (
+                <Navigation className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+              )}
             </div>
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white">{getStatusText()}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {orderStatus === 'delivering' ? 'Your delivery partner is on the way' : 'Waiting for updates...'}
+              <p className={`font-semibold ${orderStatus === 'rejected' ? 'text-rose-900 dark:text-rose-100' : 'text-gray-900 dark:text-white'}`}>{getStatusText()}</p>
+              <p className={`text-sm ${orderStatus === 'rejected' ? 'text-rose-600 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                {orderStatus === 'delivering' ? 'Your delivery partner is on the way' : orderStatus === 'rejected' ? 'This order was cancelled by the shop' : 'Waiting for updates...'}
               </p>
             </div>
             {orderStatus === 'delivering' && (

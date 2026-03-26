@@ -141,7 +141,7 @@ export function DeliveryDashboard() {
       const driverId = auth.currentUser?.uid;
       
       // Filter orders:
-      // 1. Unassigned orders that are ready or preparing
+      // 1. Unassigned orders that are ready
       // 2. Orders assigned to this driver
       const relevantOrders = allOrders.filter(order => {
         if (order.driverId === driverId) {
@@ -154,7 +154,7 @@ export function DeliveryDashboard() {
           }
           return true;
         }
-        if (!order.driverId && (order.status === 'ready' || order.status === 'preparing' || order.status === 'pending')) {
+        if (!order.driverId && order.status === 'ready') {
           // In a real app, we would calculate actual distance using coordinates.
           // Since we don't have coordinates for the delivery address, we'll use the simulated distanceKm
           // and only show orders within 1km.

@@ -567,14 +567,14 @@ export function VendorDashboard({ onAddressChange }: { onAddressChange?: (addres
         <div className="space-y-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Active Orders</h2>
           <div className="grid gap-4">
-            {orders.length === 0 ? (
+            {orders.filter(o => o.status !== 'completed' && o.status !== 'rejected').length === 0 ? (
               <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm text-center">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">No active orders</h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">When customers place orders, they will appear here.</p>
               </div>
             ) : (
-              orders.map((order) => (
+              orders.filter(o => o.status !== 'completed' && o.status !== 'rejected').map((order) => (
                 <div key={order.id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">

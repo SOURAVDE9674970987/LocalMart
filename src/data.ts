@@ -1,4 +1,4 @@
-export type Category = 'Grocery' | 'Vegetables' | 'Pharmacy' | 'Snacks';
+export type Category = 'Grocery' | 'Vegetables' | 'Pharmacy' | 'Snacks' | 'Medicine';
 
 export interface Shop {
   id: string;

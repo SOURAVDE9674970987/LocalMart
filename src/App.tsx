@@ -21,6 +21,10 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
+import { ServiceDashboard } from './components/ServiceDashboard';
+
+import { ServiceList } from './components/ServiceList';
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<UserRole>('customer');
@@ -34,6 +38,7 @@ export default function App() {
   const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
   const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
   const [address, setAddress] = useState('Home - 10001');
+  const [customerLocation, setCustomerLocation] = useState<[number, number] | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -125,6 +130,8 @@ export default function App() {
             <VendorDashboard onAddressChange={setAddress} />
           ) : userRole === 'delivery' ? (
             <DeliveryDashboard />
+          ) : userRole === 'plumber' || userRole === 'electrician' || userRole === 'ambulance' ? (
+            <ServiceDashboard serviceType={userRole} />
           ) : searchQuery ? (
             <GlobalSearchResults searchQuery={searchQuery} />
           ) : selectedShopId ? (
@@ -173,10 +180,13 @@ export default function App() {
                 onSelectCategory={setSelectedCategory}
               />
               
+              <ServiceList customerLocation={customerLocation} />
+              
               <div id="shop-list">
                 <ShopList 
                   selectedCategory={selectedCategory} 
                   onSelectShop={setSelectedShopId} 
+                  customerLocation={customerLocation}
                 />
               </div>
             </>
@@ -193,7 +203,13 @@ export default function App() {
           isOpen={isAddressModalOpen} 
           onClose={() => setIsAddressModalOpen(false)} 
           currentAddress={address}
-          onSave={setAddress}
+          initialCoordinates={customerLocation}
+          onSave={(newAddress, newLocation) => {
+            setAddress(newAddress);
+            if (newLocation) {
+              setCustomerLocation(newLocation);
+            }
+          }}
         />
         <OrderTrackingModal 
           isOpen={isTrackingModalOpen} 

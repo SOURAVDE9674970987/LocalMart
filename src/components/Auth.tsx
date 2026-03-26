@@ -2,9 +2,9 @@ import React, { useState, useRef } from 'react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { Mail, Lock, User, Image as ImageIcon, ShoppingBag, ArrowLeft, Store, Truck, UserCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, User, Image as ImageIcon, ShoppingBag, ArrowLeft, Store, Truck, UserCircle, CheckCircle2, Wrench, Zap, Ambulance, Phone } from 'lucide-react';
 
-export type UserRole = 'customer' | 'vendor' | 'delivery';
+export type UserRole = 'customer' | 'vendor' | 'delivery' | 'plumber' | 'electrician' | 'ambulance';
 
 export function Auth() {
   const [view, setView] = useState<'login' | 'signup' | 'forgot'>('login');
@@ -34,25 +34,35 @@ export function Auth() {
     setError('');
     setMessage('');
 
+    const isServiceRole = ['plumber', 'electrician', 'ambulance'].includes(role);
+    const authEmail = email.includes('@') ? email : `${email.replace(/[^0-9+]/g, '')}@service.localmart.com`;
+
     try {
       if (view === 'login') {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, authEmail, password);
       } else if (view === 'signup') {
         if (password !== repeatPassword) {
           setError('Passwords do not match');
           return;
         }
         localStorage.setItem('localmart_role', role);
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
         
         // Save user to Firestore
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
+        const userData: any = {
           name,
-          email,
           role,
           profileImage: profileImage || '',
           createdAt: new Date().toISOString()
-        });
+        };
+        
+        if (isServiceRole) {
+          userData.phone = email;
+        } else {
+          userData.email = email;
+        }
+
+        await setDoc(doc(db, 'users', userCredential.user.uid), userData);
 
         await signOut(auth); // Log out immediately after creation
         setView('login');
@@ -60,7 +70,7 @@ export function Auth() {
         setPassword('');
         setRepeatPassword('');
       } else if (view === 'forgot') {
-        await sendPasswordResetEmail(auth, email);
+        await sendPasswordResetEmail(auth, authEmail);
         setMessage('Password reset email sent. Please check your inbox.');
         setView('login');
       }
@@ -141,11 +151,14 @@ export function Auth() {
 
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             {view === 'signup' && (
-              <div className="flex p-1.5 bg-gray-200/50 dark:bg-gray-800/50 rounded-2xl gap-1.5 mb-8">
+              <div className="grid grid-cols-3 p-1.5 bg-gray-200/50 dark:bg-gray-800/50 rounded-2xl gap-1.5 mb-8">
                 {[
                   { id: 'customer', icon: UserCircle, label: 'Customer' },
                   { id: 'vendor', icon: Store, label: 'Vendor' },
-                  { id: 'delivery', icon: Truck, label: 'Driver' }
+                  { id: 'delivery', icon: Truck, label: 'Driver' },
+                  { id: 'plumber', icon: Wrench, label: 'Plumber' },
+                  { id: 'electrician', icon: Zap, label: 'Electrician' },
+                  { id: 'ambulance', icon: Ambulance, label: 'Ambulance' }
                 ].map((r) => {
                   const Icon = r.icon;
                   const isActive = role === r.id;
@@ -154,7 +167,7 @@ export function Auth() {
                       key={r.id}
                       type="button"
                       onClick={() => setRole(r.id as UserRole)}
-                      className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         isActive 
                           ? 'bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-600/50' 
                           : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -215,18 +228,24 @@ export function Auth() {
               )}
               
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 ml-1">Email address</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 ml-1">
+                  {view === 'signup' && ['plumber', 'electrician', 'ambulance'].includes(role) ? 'Phone Number' : (view === 'login' ? 'Email or Phone Number' : 'Email address')}
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
+                    {view === 'signup' && ['plumber', 'electrician', 'ambulance'].includes(role) ? (
+                      <Phone className="h-5 w-5 text-gray-400" />
+                    ) : (
+                      <Mail className="h-5 w-5 text-gray-400" />
+                    )}
                   </div>
                   <input
-                    type="email"
+                    type={view === 'signup' && ['plumber', 'electrician', 'ambulance'].includes(role) ? 'tel' : 'text'}
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="block w-full pl-11 pr-4 py-3.5 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white dark:focus:bg-gray-800 sm:text-sm transition-all shadow-sm"
-                    placeholder="you@example.com"
+                    placeholder={view === 'signup' && ['plumber', 'electrician', 'ambulance'].includes(role) ? '+1234567890' : 'you@example.com'}
                   />
                 </div>
               </div>
