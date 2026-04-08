@@ -48,7 +48,7 @@ export function Auth() {
           setError('Passwords do not match');
           return;
         }
-        if (role !== 'customer') {
+        if (role !== 'customer' && role !== 'delivery') {
           setView('payment');
           return;
         }
@@ -422,7 +422,7 @@ export function Auth() {
                 className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 active:scale-[0.98]"
               >
                 {view === 'login' && 'Sign in'}
-                {view === 'signup' && 'Continue to Payment'}
+                {view === 'signup' && (role === 'customer' || role === 'delivery' ? 'Create account' : 'Continue to Payment')}
                 {view === 'payment' && `Pay $${role === 'vendor' ? '10' : '5'} & Create Account`}
                 {view === 'forgot' && 'Send Reset Link'}
               </button>

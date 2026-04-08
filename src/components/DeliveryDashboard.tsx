@@ -229,6 +229,13 @@ export function DeliveryDashboard() {
       const driverId = auth.currentUser?.uid;
       if (!driverId) return;
       
+      // Check if driver already has an active delivery
+      const hasActiveDelivery = deliveries.some(d => d.driverId === driverId && d.status === 'delivering');
+      if (hasActiveDelivery) {
+        alert("You can only handle one active delivery at a time. Please complete your current delivery first.");
+        return;
+      }
+      
       const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, { 
         driverId,
